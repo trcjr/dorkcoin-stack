@@ -1,0 +1,72 @@
+services:
+  dorkcoin:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        DORKCOIN_REPO_URL: "https://github.com/dorkcoinorg/dorkcoin.git"
+        DORKCOIN_REF: "v13.2"
+        DORKCOIN_COMMIT: "a452ce5c9a4f0ba8eb699ede2b97d2b56f403d2d"
+        MAKE_JOBS: "${MAKE_JOBS:-4}"
+    container_name: dorkcoind
+    restart: unless-stopped
+
+    environment:
+      DORKCOIN_DATA_DIR: "/home/dorkcoin/.dorkcoin"
+      DORKCOIN_CONF: "/home/dorkcoin/.dorkcoin/dorkcoin.conf"
+
+      DORKCOIN_RPC_USER: "${DORKCOIN_RPC_USER}"
+      DORKCOIN_RPC_PASSWORD: "${DORKCOIN_RPC_PASSWORD}"
+
+      # Dorkcoin mainnet defaults
+      DORKCOIN_P2P_PORT: "${DORKCOIN_P2P_PORT:-25516}"
+      DORKCOIN_RPC_PORT: "${DORKCOIN_RPC_PORT:-25515}"
+
+      # Keep RPC internal to Docker unless you intentionally publish it
+      DORKCOIN_RPC_BIND: "${DORKCOIN_RPC_BIND:-0.0.0.0}"
+      DORKCOIN_RPC_ALLOW_IP: "${DORKCOIN_RPC_ALLOW_IP:-0.0.0.0/0}"
+
+      # Optional extras
+      DORKCOIN_TXINDEX: "${DORKCOIN_TXINDEX:-1}"
+      DORKCOIN_PRUNE: "${DORKCOIN_PRUNE:-0}"
+      DORKCOIN_MAXCONNECTIONS: "${DORKCOIN_MAXCONNECTIONS:-64}"
+      DORKCOIN_BOOTSTRAP_NODES: "${DORKCOIN_BOOTSTRAP_NODES:-170.75.161.131:25516}"
+      DORKCOIN_EXTRA_ARGS: "${DORKCOIN_EXTRA_ARGS:-}"
+
+    ports:
+      - "${DORKCOIN_P2P_PORT:-25516}:${DORKCOIN_P2P_PORT:-25516}"
+      # Intentionally commented out so RPC stays private to the compose network.
+      # Uncomment only if you really want host access:
+      # - "${DORKCOIN_RPC_PORT:-25515}:${DORKCOIN_RPC_PORT:-25515}"
+
+
+    expose:
+      - "${DORKCOIN_P2P_PORT:-25516}"
+      - "${DORKCOIN_RPC_PORT:-25515}"
+
+    volumes:
+      - ./dot-dorkcoin:/home/dorkcoin/.dorkcoin
+
+    networks:
+      - dorkcoin_net
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS --user \"$${DORKCOIN_RPC_USER}:$${DORKCOIN_RPC_PASSWORD}\" --data-binary '{\"jsonrpc\":\"1.0\",\"id\":\"health\",\"method\":\"getblockchaininfo\",\"params\":[]}' -H 'content-type: text/plain;' http://127.0.0.1:$${DORKCOIN_RPC_PORT}/ >/dev/null"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+
+networks:
+  dorkcoin_net:
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: "172.26.0.0/24"
+        - subnet: "fd42:d07c:c01d::/80"
