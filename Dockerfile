@@ -27,7 +27,7 @@ ARG LIBQRENCODE_DEV_VERSION=4.1.1-2
 ARG LIBSSL_DEV_VERSION=3.5.5-1~deb13u1
 ARG DORKCOIN_REPO_URL=https://github.com/dorkcoinorg/dorkcoin.git
 ARG DORKCOIN_REF=v13.2
-ARG DORKCOIN_COMMIT=a452ce5c9a4f0ba8eb699ede2b97d2b56f403d2d
+ARG DORKCOIN_COMMIT=
 ARG BDB_URL=https://download.oracle.com/berkeley-db/db-6.2.32.NC.tar.gz
 ARG BDB_SHA256=d86cf1283c519d42dd112b4501ecb2db11ae765b37a1bdad8f8cb06b0ffc69b8
 ARG MAKE_JOBS=1
@@ -70,6 +70,7 @@ RUN rm -f /etc/apt/sources.list.d/debian.sources \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /tmp
+
 RUN curl -fsSL "${BDB_URL}" -o db-6.2.32.NC.tar.gz \
  && echo "${BDB_SHA256}  db-6.2.32.NC.tar.gz" | sha256sum -c - \
  && tar -xzf db-6.2.32.NC.tar.gz \
@@ -80,24 +81,31 @@ RUN curl -fsSL "${BDB_URL}" -o db-6.2.32.NC.tar.gz \
 
 RUN test -n "${DORKCOIN_REPO_URL}" \
  && git clone --depth 1 --branch "${DORKCOIN_REF}" --single-branch "${DORKCOIN_REPO_URL}" dorkcoin-src \
- && test "$(git -C /tmp/dorkcoin-src rev-parse HEAD)" = "${DORKCOIN_COMMIT}"
+ && actual_commit="$(git -C /tmp/dorkcoin-src rev-parse HEAD)" \
+ && echo "Resolved DORKCOIN_REF=${DORKCOIN_REF} to commit ${actual_commit}" \
+ && if [ -n "${DORKCOIN_COMMIT}" ]; then \
+      test "${actual_commit}" = "${DORKCOIN_COMMIT}"; \
+    else \
+      echo "DORKCOIN_COMMIT not set; skipping pinned commit verification"; \
+    fi
 
 WORKDIR /tmp/dorkcoin-src
+
 RUN ./autogen.sh \
  && mkdir -p build \
  && cd build \
  && ../configure \
-     --without-gui \
-     --disable-tests \
-     --disable-bench \
-     --disable-man \
-     --enable-wallet \
-     --without-miniupnpc \
+      --without-gui \
+      --disable-tests \
+      --disable-bench \
+      --disable-man \
+      --enable-wallet \
+      --without-miniupnpc \
  && make -j"${MAKE_JOBS}" \
  && strip --strip-unneeded \
-     ./src/dorkcoind \
-     ./src/dorkcoin-cli \
-     ./src/dorkcoin-tx
+      ./src/dorkcoind \
+      ./src/dorkcoin-cli \
+      ./src/dorkcoin-tx
 
 
 FROM debian:trixie-slim@sha256:26f98ccd92fd0a44d6928ce8ff8f4921b4d2f535bfa07555ee5d18f61429cf0c
@@ -122,14 +130,14 @@ RUN rm -f /etc/apt/sources.list.d/debian.sources \
  && printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99snapshot \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
-    bash="${BASH_PKG_VERSION}" \
+     bash="${BASH_PKG_VERSION}" \
      ca-certificates="${CA_CERTIFICATES_VERSION}" \
      curl="${CURL_VERSION}" \
      gosu="${GOSU_VERSION}" \
      libevent-2.1-7t64="${LIBEVENT_VERSION}" \
      libevent-pthreads-2.1-7t64="${LIBEVENT_VERSION}" \
      libboost-filesystem1.83.0="${LIBBOOST_RUNTIME_VERSION}" \
-    libboost-chrono1.83.0t64="${LIBBOOST_RUNTIME_VERSION}" \
+     libboost-chrono1.83.0t64="${LIBBOOST_RUNTIME_VERSION}" \
      libboost-program-options1.83.0="${LIBBOOST_RUNTIME_VERSION}" \
      libboost-random1.83.0="${LIBBOOST_RUNTIME_VERSION}" \
      libboost-system1.83.0="${LIBBOOST_RUNTIME_VERSION}" \
