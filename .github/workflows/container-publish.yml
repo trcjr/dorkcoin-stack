@@ -36,6 +36,7 @@ jobs:
       should_build: ${{ steps.resolve.outputs.should_build }}
       target_tag: ${{ steps.resolve.outputs.target_tag }}
       upstream_commit: ${{ steps.resolve.outputs.upstream_commit }}
+      upstream_ref: ${{ steps.resolve.outputs.upstream_ref }}
       checkout_ref: ${{ steps.resolve.outputs.checkout_ref }}
       is_release: ${{ steps.resolve.outputs.is_release }}
     steps:
@@ -57,25 +58,38 @@ jobs:
           should_build=false
           target_tag=""
           upstream_commit=""
+          upstream_ref=""
           checkout_ref=""
           is_release=false
 
           resolve_upstream_commit() {
             local tag="$1"
-            gh api "repos/$UPSTREAM_REPO/git/ref/tags/$tag" -q '.object.sha'
+            local object_type object_sha
+
+            object_type="$(gh api "repos/$UPSTREAM_REPO/git/ref/tags/$tag" -q '.object.type')"
+            object_sha="$(gh api "repos/$UPSTREAM_REPO/git/ref/tags/$tag" -q '.object.sha')"
+
+            if [ "$object_type" = "tag" ]; then
+              gh api "repos/$UPSTREAM_REPO/git/tags/$object_sha" -q '.object.sha'
+            else
+              printf '%s\n' "$object_sha"
+            fi
           }
 
           if [ "$EVENT_NAME" = "pull_request" ]; then
             should_build=true
             checkout_ref="$SHA"
+            upstream_ref="$DEFAULT_BRANCH"
             echo "PR build only"
           elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             should_build=true
             checkout_ref="refs/heads/$DEFAULT_BRANCH"
+            upstream_ref="$DEFAULT_BRANCH"
 
             if [ -n "${INPUT_TAG:-}" ]; then
               target_tag="$INPUT_TAG"
               upstream_commit="$(resolve_upstream_commit "$target_tag")"
+              upstream_ref="$target_tag"
               is_release=true
               echo "Manual release build for upstream tag $target_tag @ $upstream_commit"
             else
@@ -85,11 +99,13 @@ jobs:
             should_build=true
             target_tag="$REF_NAME"
             upstream_commit="$(resolve_upstream_commit "$target_tag")"
+            upstream_ref="$target_tag"
             checkout_ref="$REF"
             is_release=true
             echo "Repo tag push release build for upstream tag $target_tag @ $upstream_commit"
           else
             should_build=true
+            upstream_ref="$DEFAULT_BRANCH"
             checkout_ref="$REF"
             echo "Branch build only"
           fi
@@ -98,6 +114,7 @@ jobs:
             echo "should_build=$should_build"
             echo "target_tag=$target_tag"
             echo "upstream_commit=$upstream_commit"
+            echo "upstream_ref=$upstream_ref"
             echo "checkout_ref=$checkout_ref"
             echo "is_release=$is_release"
           } >> "$GITHUB_OUTPUT"
@@ -145,7 +162,7 @@ jobs:
           file: ./Dockerfile
           build-args: |
             DORKCOIN_REPO_URL=https://github.com/${{ env.UPSTREAM_REPO }}.git
-            DORKCOIN_REF=${{ needs.prepare.outputs.target_tag != '' && needs.prepare.outputs.target_tag || github.ref_name }}
+            DORKCOIN_REF=${{ needs.prepare.outputs.upstream_ref }}
             DORKCOIN_COMMIT=${{ needs.prepare.outputs.upstream_commit }}
           platforms: linux/amd64,linux/arm64
           push: ${{ needs.prepare.outputs.is_release == 'true' }}
