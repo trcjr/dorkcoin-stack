@@ -1,14 +1,6 @@
 services:
   dorkcoin:
-    platform: linux/amd64
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        DORKCOIN_REPO_URL: "https://github.com/dorkcoinorg/dorkcoin.git"
-        DORKCOIN_REF: "v13.2"
-        DORKCOIN_COMMIT: "a452ce5c9a4f0ba8eb699ede2b97d2b56f403d2d"
-        MAKE_JOBS: "${MAKE_JOBS:-4}"
+    image: ghcr.io/trcjr/dorkcoin-stack:v13.2
     container_name: dorkcoind
     restart: unless-stopped
 
